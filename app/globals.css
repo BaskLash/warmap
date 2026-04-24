@@ -1,8 +1,11 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --accent: #ef4444;
+  --accent-soft: #f59e0b;
+  --accent-cool: #38bdf8;
 }
 
 @theme inline {
@@ -12,15 +15,117 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html,
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  height: 100%;
+  margin: 0;
 }
+
+/* Leaflet dark-mode polish */
+.leaflet-container {
+  background: #0b0f14;
+  outline: none;
+}
+.leaflet-control-attribution {
+  background: rgba(0, 0, 0, 0.55) !important;
+  color: rgba(255, 255, 255, 0.55) !important;
+  font-size: 10px !important;
+  backdrop-filter: blur(6px);
+}
+.leaflet-control-attribution a {
+  color: rgba(255, 255, 255, 0.75) !important;
+}
+.leaflet-control-zoom a {
+  background: rgba(15, 20, 28, 0.9) !important;
+  color: #e5e7eb !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(6px);
+}
+.leaflet-control-zoom a:hover {
+  background: rgba(40, 45, 55, 0.95) !important;
+}
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: rgba(10, 12, 16, 0.95) !important;
+  color: #e5e7eb !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6) !important;
+}
+.leaflet-popup-content {
+  margin: 10px 14px !important;
+  line-height: 1.45 !important;
+}
+.leaflet-popup-close-button {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+/* Custom event marker */
+.warmap-marker {
+  position: relative;
+  width: 14px;
+  height: 14px;
+}
+.warmap-marker-dot {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--marker-color, #ef4444);
+  box-shadow: 0 0 0 2px rgba(10, 10, 10, 0.85), 0 0 14px var(--marker-color, #ef4444);
+}
+.warmap-marker-pulse {
+  position: absolute;
+  inset: -6px;
+  border-radius: 999px;
+  background: var(--marker-color, #ef4444);
+  opacity: 0.35;
+  animation: warmapPulse 2.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+@keyframes warmapPulse {
+  0% { transform: scale(0.6); opacity: 0.55; }
+  80% { transform: scale(2.2); opacity: 0; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+/* Cluster marker */
+.warmap-cluster {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.22);
+  border: 1px solid rgba(239, 68, 68, 0.55);
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5), 0 0 18px rgba(239, 68, 68, 0.35);
+}
+
+/* Scrollbar */
+.warmap-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.warmap-scroll::-webkit-scrollbar-track { background: transparent; }
+.warmap-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+.warmap-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* Fade-in for newly arrived items */
+@keyframes warmapFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.warmap-new {
+  animation: warmapFadeIn 350ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Prevent Leaflet default icon shadow box from being visible because we use divIcons */
+.leaflet-marker-icon.warmap-divicon { background: transparent !important; border: none !important; }
