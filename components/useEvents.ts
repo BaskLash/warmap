@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { StreamMessage, WarEvent } from "@/lib/types";
+import type { PipelineStatus, StreamMessage, WarEvent } from "@/lib/types";
 
 export type ConnectionState = "connecting" | "live" | "polling" | "offline";
 
@@ -10,6 +10,7 @@ interface UseEventsResult {
   connection: ConnectionState;
   lastUpdate: number | null;
   latestId: string | null;
+  status: PipelineStatus | null;
 }
 
 const MAX_CLIENT_EVENTS = 500;
@@ -29,6 +30,7 @@ export function useEvents(): UseEventsResult {
   const [connection, setConnection] = useState<ConnectionState>("connecting");
   const [lastUpdate, setLastUpdate] = useState<number | null>(null);
   const [latestId, setLatestId] = useState<string | null>(null);
+  const [status, setStatus] = useState<PipelineStatus | null>(null);
   const sourceRef = useRef<EventSource | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -36,8 +38,12 @@ export function useEvents(): UseEventsResult {
     try {
       const res = await fetch("/api/events", { cache: "no-store" });
       if (!res.ok) return;
-      const json = (await res.json()) as { events: WarEvent[] };
+      const json = (await res.json()) as {
+        events: WarEvent[];
+        status: PipelineStatus;
+      };
       setEvents((prev) => mergeEvents(prev, json.events));
+      setStatus(json.status);
       setLastUpdate(Date.now());
       setConnection("polling");
     } catch {
@@ -61,13 +67,17 @@ export function useEvents(): UseEventsResult {
         es.onmessage = (ev) => {
           try {
             const msg = JSON.parse(ev.data) as StreamMessage;
-            if (msg.type === "init" && msg.events) {
-              setEvents((prev) => mergeEvents(prev, msg.events!));
+            if (msg.type === "init") {
+              if (msg.events) setEvents((prev) => mergeEvents(prev, msg.events!));
+              if (msg.status) setStatus(msg.status);
               setLastUpdate(msg.ts);
             } else if (msg.type === "event" && msg.event) {
               const incoming = msg.event;
               setEvents((prev) => mergeEvents(prev, [incoming]));
               setLatestId(incoming.id);
+              setLastUpdate(msg.ts);
+            } else if (msg.type === "status" && msg.status) {
+              setStatus(msg.status);
               setLastUpdate(msg.ts);
             } else if (msg.type === "heartbeat") {
               setLastUpdate(msg.ts);
@@ -82,7 +92,6 @@ export function useEvents(): UseEventsResult {
           es.close();
           sourceRef.current = null;
           if (closed) return;
-          // Fall back to polling and retry SSE after a delay
           if (!pollRef.current) {
             void refreshPoll();
             pollRef.current = setInterval(refreshPoll, 30_000);
@@ -116,5 +125,5 @@ export function useEvents(): UseEventsResult {
     };
   }, [refreshPoll]);
 
-  return { events, connection, lastUpdate, latestId };
+  return { events, connection, lastUpdate, latestId, status };
 }

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
 import Legend from "@/components/Legend";
+import LoadingOverlay from "@/components/LoadingOverlay";
 import { useEvents } from "@/components/useEvents";
 
 const WarMap = dynamic(() => import("@/components/WarMap"), {
@@ -17,7 +18,7 @@ const WarMap = dynamic(() => import("@/components/WarMap"), {
 });
 
 export default function Home() {
-  const { events, connection, lastUpdate, latestId } = useEvents();
+  const { events, connection, lastUpdate, latestId, status } = useEvents();
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [notificationsOn, setNotificationsOn] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -85,6 +86,12 @@ export default function Home() {
         totalEvents={events.length}
         notificationsOn={notificationsOn}
         onToggleNotifications={handleToggleNotifications}
+      />
+
+      <LoadingOverlay
+        connection={connection}
+        status={status}
+        eventCount={events.length}
       />
 
       <Legend />

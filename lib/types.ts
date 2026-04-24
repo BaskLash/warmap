@@ -44,9 +44,18 @@ export interface WarEvent {
   keywords: string[];
 }
 
+export interface PipelineStatus {
+  firstCycleCompleted: boolean;
+  cyclesCompleted: number;
+  sources: number;
+  llmEnabled: boolean;
+  lastError: string | null;
+}
+
 export interface StreamMessage {
-  type: "init" | "event" | "heartbeat";
+  type: "init" | "event" | "heartbeat" | "status";
   event?: WarEvent;
   events?: WarEvent[];
+  status?: PipelineStatus;
   ts: number;
 }

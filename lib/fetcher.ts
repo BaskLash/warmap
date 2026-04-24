@@ -1,5 +1,6 @@
 import { extractEvent } from "./event-extractor";
 import { eventStore } from "./event-store";
+import { getLlmStats, hasOpenAIKey } from "./llm-extractor";
 import { parseFeed } from "./rss-parser";
 import { SOURCES, type Source } from "./sources";
 
@@ -8,6 +9,7 @@ const FETCH_TIMEOUT_MS = 15 * 1000;
 
 interface FetcherState {
   started: boolean;
+  firstCycleCompleted: boolean;
   lastRun: number;
   lastError: string | null;
   inFlight: Promise<void> | null;
@@ -26,6 +28,7 @@ const state: FetcherState =
   g[GLOBAL_KEY] ??
   (g[GLOBAL_KEY] = {
     started: false,
+    firstCycleCompleted: false,
     lastRun: 0,
     lastError: null,
     inFlight: null,
@@ -92,14 +95,27 @@ async function fetchOne(source: Source): Promise<number> {
 }
 
 async function runCycle(): Promise<void> {
+  const t0 = Date.now();
+  const cycleNo = state.stats.cyclesCompleted + 1;
+  console.log(
+    `[warmap] cycle #${cycleNo} start :: sources=${SOURCES.length} llm=${hasOpenAIKey() ? "on" : "off"}`,
+  );
+
   const results = await Promise.allSettled(SOURCES.map(fetchOne));
   const added = results.reduce(
     (n, r) => n + (r.status === "fulfilled" ? r.value : 0),
     0,
   );
+  const failedSources = results.filter((r) => r.status === "rejected").length;
   state.lastRun = Date.now();
   state.stats.cyclesCompleted += 1;
+  state.firstCycleCompleted = true;
   if (added > 0) state.lastError = null;
+
+  const llm = getLlmStats();
+  console.log(
+    `[warmap] cycle #${cycleNo} done  :: items=${state.stats.totalItems} added=${added} total=${state.stats.totalEvents} failedSources=${failedSources} elapsed=${Date.now() - t0}ms llmCalls=${llm.calls} llmCache=${llm.cacheHits} llmErrors=${llm.errors} avgLatency=${llm.avgLatencyMs}ms`,
+  );
 }
 
 function schedule() {
@@ -131,9 +147,11 @@ export function ensureFetcherStarted(): Promise<void> {
 export function getFetcherStatus() {
   return {
     started: state.started,
+    firstCycleCompleted: state.firstCycleCompleted,
     lastRun: state.lastRun,
     lastError: state.lastError,
     sources: SOURCES.length,
+    llmEnabled: hasOpenAIKey(),
     ...state.stats,
   };
 }

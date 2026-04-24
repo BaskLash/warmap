@@ -50,45 +50,64 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+function renderEventRow(e: WarEvent): string {
+  const color = eventColor(e);
+  return `
+    <div style="padding:10px 0;border-top:1px solid rgba(255,255,255,0.06);">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        <span style="width:8px;height:8px;border-radius:999px;background:${color};box-shadow:0 0 6px ${color};flex-shrink:0;"></span>
+        <span style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:${color};font-weight:600;">
+          ${escapeHtml(EVENT_LABELS[e.eventType])}
+        </span>
+        <span style="font-size:11px;color:#94a3b8;margin-left:auto;flex-shrink:0;">${escapeHtml(relativeTime(e.publishedAt))}</span>
+      </div>
+      <div style="font-size:13px;font-weight:600;line-height:1.35;color:#f9fafb;margin-bottom:4px;">
+        ${escapeHtml(e.title)}
+      </div>
+      ${e.summary ? `<div style="font-size:12px;line-height:1.45;color:#cbd5e1;margin-bottom:6px;">${escapeHtml(e.summary.slice(0, 180))}${e.summary.length > 180 ? "…" : ""}</div>` : ""}
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:#94a3b8;">
+        <span><strong style="color:#e2e8f0;">Source:</strong> ${escapeHtml(e.source)}</span>
+        ${e.sourceUrl ? `<a href="${escapeHtml(e.sourceUrl)}" target="_blank" rel="noreferrer noopener" style="color:#60a5fa;text-decoration:none;font-weight:500;">Open →</a>` : ""}
+      </div>
+    </div>
+  `;
+}
+
 function buildPopup(group: LocationGroup): string {
-  const [primary, ...rest] = group.events;
-  const color = eventColor(primary);
-  const extraCount = rest.length;
-  const countBadge =
-    extraCount > 0
-      ? `<span style="margin-left:8px;padding:2px 6px;border-radius:999px;background:rgba(255,255,255,0.08);font-size:11px;color:#cbd5f5;">+${extraCount} more</span>`
-      : "";
+  const primary = group.events[0];
+  const count = group.events.length;
+  const sources = new Set(group.events.map((e) => e.source));
 
   const confBadge =
     primary.location.confidence === "high"
       ? ""
-      : `<span style="margin-left:6px;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,0.15);color:#fbbf24;font-size:10px;text-transform:uppercase;letter-spacing:0.04em;">${escapeHtml(primary.location.confidence)}</span>`;
+      : `<span style="padding:1px 6px;border-radius:4px;background:rgba(245,158,11,0.15);color:#fbbf24;font-size:10px;text-transform:uppercase;letter-spacing:0.04em;">${escapeHtml(primary.location.confidence)}</span>`;
+
+  const countLabel =
+    count === 1
+      ? "1 article"
+      : `${count} articles${sources.size > 1 ? ` · ${sources.size} sources` : ""}`;
+
+  const eventRows = group.events.slice(0, 25).map(renderEventRow).join("");
+  const overflowNote =
+    count > 25
+      ? `<div style="padding:8px 0 0;font-size:11px;color:#94a3b8;text-align:center;">+${count - 25} more — see sidebar for full list</div>`
+      : "";
 
   return `
-    <div style="max-width:320px;font-family:var(--font-sans, system-ui);color:#e5e7eb;">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-        <span style="width:8px;height:8px;border-radius:999px;background:${color};box-shadow:0 0 8px ${color};"></span>
-        <span style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#9ca3af;">
-          ${escapeHtml(EVENT_LABELS[primary.eventType])}
-        </span>
-        ${confBadge}
-        ${countBadge}
+    <div style="width:320px;max-width:90vw;font-family:var(--font-sans, system-ui);color:#e5e7eb;">
+      <div style="padding-bottom:8px;">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+          <span style="font-size:14px;font-weight:600;color:#f9fafb;">
+            ${escapeHtml(group.locationName)}${group.country ? `<span style="color:#94a3b8;font-weight:400;">, ${escapeHtml(group.country)}</span>` : ""}
+          </span>
+          ${confBadge}
+        </div>
+        <div style="font-size:11px;color:#94a3b8;">${escapeHtml(countLabel)}</div>
       </div>
-      <div style="font-size:14px;font-weight:600;line-height:1.35;margin-bottom:6px;color:#f9fafb;">
-        ${escapeHtml(primary.title)}
-      </div>
-      <div style="font-size:12px;line-height:1.45;color:#cbd5e1;margin-bottom:8px;">
-        ${escapeHtml(primary.summary.slice(0, 220))}${primary.summary.length > 220 ? "…" : ""}
-      </div>
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:#94a3b8;">
-        <span>
-          <strong style="color:#e2e8f0;">Source:</strong> ${escapeHtml(primary.source)} · ${escapeHtml(relativeTime(primary.publishedAt))}
-        </span>
-        <a href="${escapeHtml(primary.sourceUrl)}" target="_blank" rel="noreferrer noopener"
-          style="color:#60a5fa;text-decoration:none;font-weight:500;">Open →</a>
-      </div>
-      <div style="margin-top:6px;font-size:11px;color:#64748b;">
-        ${escapeHtml(group.locationName)}${group.country ? `, ${escapeHtml(group.country)}` : ""}
+      <div class="warmap-scroll" style="max-height:340px;overflow-y:auto;padding-right:4px;">
+        ${eventRows}
+        ${overflowNote}
       </div>
     </div>
   `;
@@ -200,6 +219,8 @@ export default function WarMap({
           closeButton: true,
           autoPan: true,
           offset: [0, -4],
+          maxWidth: 360,
+          minWidth: 280,
           className: "warmap-popup",
         });
 

@@ -101,6 +101,14 @@ const JSON_SCHEMA = {
 const cache = new Map<string, LlmExtractionResult>();
 const MAX_CACHE = 2000;
 
+interface LlmStats {
+  calls: number;
+  cacheHits: number;
+  errors: number;
+  totalLatencyMs: number;
+}
+const stats: LlmStats = { calls: 0, cacheHits: 0, errors: 0, totalLatencyMs: 0 };
+
 function cachePut(key: string, value: LlmExtractionResult) {
   cache.set(key, value);
   if (cache.size > MAX_CACHE) {
@@ -113,6 +121,14 @@ export function hasOpenAIKey(): boolean {
   return Boolean(process.env.OPENAI_API_KEY);
 }
 
+export function getLlmStats(): LlmStats & { cacheSize: number; avgLatencyMs: number } {
+  return {
+    ...stats,
+    cacheSize: cache.size,
+    avgLatencyMs: stats.calls > 0 ? Math.round(stats.totalLatencyMs / stats.calls) : 0,
+  };
+}
+
 export async function extractWithLlm(
   id: string,
   title: string,
@@ -122,9 +138,13 @@ export async function extractWithLlm(
   if (!key) return null;
 
   const cached = cache.get(id);
-  if (cached) return cached;
+  if (cached) {
+    stats.cacheHits++;
+    return cached;
+  }
 
   const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+  const t0 = Date.now();
   const userContent = `Title: ${title}\n\nSummary: ${summary.slice(0, 1200)}`;
 
   const body = {
@@ -151,9 +171,10 @@ export async function extractWithLlm(
     });
 
     if (!res.ok) {
+      stats.errors++;
       const errText = await res.text().catch(() => "");
       console.warn(
-        `[llm] ${res.status} ${res.statusText} :: ${errText.slice(0, 200)}`,
+        `[warmap:llm] ${res.status} ${res.statusText} :: ${errText.slice(0, 200)}`,
       );
       return null;
     }
@@ -162,7 +183,13 @@ export async function extractWithLlm(
       choices?: Array<{ message?: { content?: string } }>;
     };
     const content = json.choices?.[0]?.message?.content;
-    if (!content) return null;
+    if (!content) {
+      stats.errors++;
+      return null;
+    }
+
+    stats.calls++;
+    stats.totalLatencyMs += Date.now() - t0;
 
     const parsed = JSON.parse(content) as LlmExtractionResult;
 
@@ -182,9 +209,10 @@ export async function extractWithLlm(
     cachePut(id, parsed);
     return parsed;
   } catch (err) {
+    stats.errors++;
     const name = (err as Error).name;
     if (name !== "AbortError") {
-      console.warn(`[llm] error: ${(err as Error).message}`);
+      console.warn(`[warmap:llm] error: ${(err as Error).message}`);
     }
     return null;
   } finally {
