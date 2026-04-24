@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
-import type { Map as LeafletMap, Marker as LeafletMarker } from "leaflet";
-import type { WarEvent } from "@/lib/types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type {
+  Map as LeafletMap,
+  Marker as LeafletMarker,
+  Polyline as LeafletPolyline,
+} from "leaflet";
+import type { EventType, Mover, WarEvent } from "@/lib/types";
 import { EVENT_LABELS, eventColor, relativeTime } from "./event-style";
 
 interface LocationGroup {
@@ -48,6 +52,59 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function moverClassName(m: Mover): string {
+  switch (m) {
+    case "missile": return "warmap-vector-missile";
+    case "drone": return "warmap-vector-drone";
+    case "aircraft": return "warmap-vector-aircraft";
+    case "ship": return "warmap-vector-ship";
+    case "troops": return "warmap-vector-troops";
+    default: return "warmap-vector-other";
+  }
+}
+
+function vectorStrokeColor(m: Mover): string {
+  switch (m) {
+    case "missile": return "#f97316";
+    case "drone": return "#eab308";
+    case "aircraft": return "#ef4444";
+    case "ship": return "#38bdf8";
+    case "troops": return "#dc2626";
+    default: return "#94a3b8";
+  }
+}
+
+// Emits the type-specific SVG/CSS layer that sits behind the normal pulse dot.
+function animationLayer(type: EventType): string {
+  switch (type) {
+    case "airstrike":
+    case "missile":
+      return `
+        <svg class="warmap-anim warmap-anim-streak" viewBox="0 0 120 120" aria-hidden="true">
+          <line x1="100" y1="20" x2="60" y2="60" />
+        </svg>`;
+    case "drone":
+      return `
+        <svg class="warmap-anim warmap-anim-orbit" viewBox="0 0 42 42" aria-hidden="true">
+          <circle cx="38" cy="21" r="2" />
+        </svg>`;
+    case "naval":
+      return `
+        <span class="warmap-anim warmap-anim-wave"></span>
+        <span class="warmap-anim warmap-anim-wave delay-1"></span>
+        <span class="warmap-anim warmap-anim-wave delay-2"></span>`;
+    case "shelling":
+      return `<span class="warmap-anim warmap-anim-burst"></span>`;
+    case "ground":
+      return `
+        <svg class="warmap-anim warmap-anim-chevron" viewBox="0 0 36 36" aria-hidden="true">
+          <path d="M18 4 L30 18 L24 18 L24 32 L12 32 L12 18 L6 18 Z" />
+        </svg>`;
+    default:
+      return "";
+  }
 }
 
 function renderEventRow(e: WarEvent): string {
@@ -129,13 +186,20 @@ export default function WarMap({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const markersRef = useRef<Map<string, LeafletMarker>>(new Map());
+  const vectorsRef = useRef<Map<string, { line: LeafletPolyline; origin: LeafletMarker }>>(
+    new Map(),
+  );
   const leafletRef = useRef<typeof import("leaflet") | null>(null);
   const hoverCbRef = useRef(onMarkerHover);
   hoverCbRef.current = onMarkerHover;
+  const [mapReady, setMapReady] = useState(false);
 
   const groups = useMemo(() => groupByLocation(events), [events]);
 
-  // Init map once
+  // Init map once. `setMapReady(true)` is the signal the sync effect below
+  // waits for — without it, any events that were already in state when the
+  // component mounted would never render (async Leaflet init resolves after
+  // the first sync effect run, and refs don't trigger re-renders).
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -165,6 +229,7 @@ export default function WarMap({
       ).addTo(map);
 
       mapRef.current = map;
+      setMapReady(true);
     })();
     return () => {
       cancelled = true;
@@ -172,12 +237,16 @@ export default function WarMap({
         mapRef.current.remove();
         mapRef.current = null;
       }
+      leafletRef.current = null;
       markersRef.current.clear();
+      vectorsRef.current.clear();
+      setMapReady(false);
     };
   }, []);
 
-  // Sync markers with grouped events
+  // Sync markers with grouped events.
   useEffect(() => {
+    if (!mapReady) return;
     const L = leafletRef.current;
     const map = mapRef.current;
     if (!L || !map) return;
@@ -193,6 +262,7 @@ export default function WarMap({
 
       const html = `
         <div class="warmap-marker" style="--marker-color:${color};">
+          ${animationLayer(primary.eventType)}
           <span class="warmap-marker-pulse"></span>
           <span class="warmap-marker-dot"></span>
           ${count > 1 ? `<span class="warmap-cluster-count" style="position:absolute;top:-10px;right:-12px;padding:1px 5px;border-radius:999px;background:rgba(10,10,10,0.9);color:#fff;font-size:10px;font-weight:600;border:1px solid ${color};">${count}</span>` : ""}
@@ -246,7 +316,65 @@ export default function WarMap({
         markersRef.current.delete(key);
       }
     }
-  }, [groups]);
+  }, [groups, mapReady]);
+
+  // Sync directional vectors (origin → target polylines).
+  const vectored = useMemo(
+    () => events.filter((e): e is WarEvent & { vector: NonNullable<WarEvent["vector"]> } =>
+      Boolean(e.vector)),
+    [events],
+  );
+
+  useEffect(() => {
+    if (!mapReady) return;
+    const L = leafletRef.current;
+    const map = mapRef.current;
+    if (!L || !map) return;
+
+    const seen = new Set<string>();
+
+    for (const ev of vectored) {
+      seen.add(ev.id);
+      if (vectorsRef.current.has(ev.id)) continue;
+
+      const { origin, target, mover } = ev.vector!;
+      const moverClass = moverClassName(mover);
+
+      const line = L.polyline(
+        [
+          [origin.lat, origin.lng],
+          [target.lat, target.lng],
+        ],
+        {
+          className: `warmap-vector ${moverClass}`,
+          interactive: false,
+          smoothFactor: 1.5,
+          noClip: false,
+        },
+      ).addTo(map);
+
+      const originIcon = L.divIcon({
+        html: `<div class="warmap-origin" style="--marker-color:${vectorStrokeColor(mover)};"></div>`,
+        className: "warmap-divicon",
+        iconSize: [12, 12],
+        iconAnchor: [6, 6],
+      });
+      const originMarker = L.marker([origin.lat, origin.lng], {
+        icon: originIcon,
+        interactive: false,
+      }).addTo(map);
+
+      vectorsRef.current.set(ev.id, { line, origin: originMarker });
+    }
+
+    for (const [id, pair] of vectorsRef.current.entries()) {
+      if (!seen.has(id)) {
+        pair.line.remove();
+        pair.origin.remove();
+        vectorsRef.current.delete(id);
+      }
+    }
+  }, [vectored, mapReady]);
 
   // Fly to focused event
   useEffect(() => {

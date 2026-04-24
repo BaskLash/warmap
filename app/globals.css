@@ -129,3 +129,144 @@ body {
 
 /* Prevent Leaflet default icon shadow box from being visible because we use divIcons */
 .leaflet-marker-icon.warmap-divicon { background: transparent !important; border: none !important; }
+
+/* ── Per-event-type marker animations ─────────────────────────────────── */
+.warmap-anim {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  pointer-events: none;
+}
+.warmap-anim svg { overflow: visible; display: block; }
+
+/* Airstrike / missile: an incoming streak that fades in, then flashes */
+.warmap-anim-streak {
+  width: 120px;
+  height: 120px;
+  margin-left: -60px;
+  margin-top: -60px;
+  opacity: 0;
+  animation: warmapStreak 3.2s cubic-bezier(0.5, 0, 0.6, 1) infinite;
+}
+.warmap-anim-streak line {
+  stroke: var(--marker-color, #ef4444);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-dasharray: 40 60;
+  stroke-dashoffset: 100;
+  filter: drop-shadow(0 0 6px var(--marker-color, #ef4444));
+  animation: warmapStreakDash 3.2s cubic-bezier(0.5, 0, 0.6, 1) infinite;
+}
+@keyframes warmapStreak {
+  0%, 100% { opacity: 0; }
+  15% { opacity: 1; }
+  70% { opacity: 0.4; }
+}
+@keyframes warmapStreakDash {
+  0% { stroke-dashoffset: 100; }
+  60% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 0; }
+}
+
+/* Drone: slow loitering orbit */
+.warmap-anim-orbit {
+  width: 42px;
+  height: 42px;
+  margin-left: -21px;
+  margin-top: -21px;
+  animation: warmapOrbit 4.2s linear infinite;
+}
+.warmap-anim-orbit circle {
+  fill: var(--marker-color, #eab308);
+  filter: drop-shadow(0 0 5px var(--marker-color, #eab308));
+}
+@keyframes warmapOrbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Naval: expanding wave rings */
+.warmap-anim-wave {
+  width: 52px;
+  height: 52px;
+  margin-left: -26px;
+  margin-top: -26px;
+  border-radius: 999px;
+  border: 1.5px solid var(--marker-color, #38bdf8);
+  opacity: 0;
+  animation: warmapWave 3s ease-out infinite;
+}
+.warmap-anim-wave.delay-1 { animation-delay: 1s; }
+.warmap-anim-wave.delay-2 { animation-delay: 2s; }
+@keyframes warmapWave {
+  0% { transform: scale(0.3); opacity: 0.7; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+/* Shelling: three concentric pulses */
+.warmap-anim-burst {
+  width: 42px;
+  height: 42px;
+  margin-left: -21px;
+  margin-top: -21px;
+  border-radius: 999px;
+  border: 2px solid var(--marker-color, #f59e0b);
+  opacity: 0;
+  animation: warmapBurst 1.8s ease-out infinite;
+}
+@keyframes warmapBurst {
+  0% { transform: scale(0.2); opacity: 0.9; }
+  70% { transform: scale(1.6); opacity: 0; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+/* Ground: rotating chevron */
+.warmap-anim-chevron {
+  width: 36px;
+  height: 36px;
+  margin-left: -18px;
+  margin-top: -18px;
+  animation: warmapChevron 6s linear infinite;
+}
+.warmap-anim-chevron path {
+  stroke: var(--marker-color, #dc2626);
+  stroke-width: 1.4;
+  fill: none;
+  filter: drop-shadow(0 0 4px var(--marker-color, #dc2626));
+}
+@keyframes warmapChevron {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ── Directional polyline (origin → target) ────────────────────────────── */
+/* Leaflet renders polylines as SVG <path>; we target them by a custom class. */
+.warmap-vector {
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-dasharray: 6 10;
+  animation: warmapVectorFlow 1.6s linear infinite;
+  filter: drop-shadow(0 0 6px currentColor);
+}
+.warmap-vector-missile { stroke: #f97316; color: #f97316; }
+.warmap-vector-drone   { stroke: #eab308; color: #eab308; }
+.warmap-vector-aircraft{ stroke: #ef4444; color: #ef4444; }
+.warmap-vector-ship    { stroke: #38bdf8; color: #38bdf8; }
+.warmap-vector-troops  { stroke: #dc2626; color: #dc2626; }
+.warmap-vector-other   { stroke: #94a3b8; color: #94a3b8; }
+@keyframes warmapVectorFlow {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: -32; }
+}
+
+/* Origin marker for vectors (faint ring where it started) */
+.warmap-origin {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 1.5px solid var(--marker-color, #ef4444);
+  background: rgba(0,0,0,0.4);
+  box-shadow: 0 0 6px var(--marker-color, #ef4444);
+  opacity: 0.8;
+}

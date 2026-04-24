@@ -114,7 +114,7 @@ async function runCycle(): Promise<void> {
 
   const llm = getLlmStats();
   console.log(
-    `[warmap] cycle #${cycleNo} done  :: items=${state.stats.totalItems} added=${added} total=${state.stats.totalEvents} failedSources=${failedSources} elapsed=${Date.now() - t0}ms llmCalls=${llm.calls} llmCache=${llm.cacheHits} llmErrors=${llm.errors} avgLatency=${llm.avgLatencyMs}ms`,
+    `[warmap] cycle #${cycleNo} done  :: items=${state.stats.totalItems} added=${added} total=${state.stats.totalEvents} failedSources=${failedSources} elapsed=${Date.now() - t0}ms llmCalls=${llm.calls} llmMemHit=${llm.cacheHits} llmDbHit=${llm.dbHits} llmErrors=${llm.errors} avgLatency=${llm.avgLatencyMs}ms`,
   );
 }
 

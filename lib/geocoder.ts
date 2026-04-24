@@ -1,4 +1,5 @@
 import type { Confidence, GeoLocation } from "./types";
+import { dbGetGeo, dbPutGeo } from "./db";
 import { lookupByName, lookupCountry } from "./gazetteer";
 import type { ExtractedLocation, LocationType } from "./llm-extractor";
 
@@ -102,13 +103,31 @@ async function callNominatim(
 }
 
 // Serialize Nominatim requests + enforce 1 req/sec throttle.
+// Three-tier cache:
+//   1. In-process LRU (hot path, microseconds)
+//   2. SQLite (persists across `npm run dev` restarts)
+//   3. Nominatim (last resort, rate-limited)
 async function throttledNominatim(
   query: string,
   country?: string,
 ): Promise<{ lat: number; lng: number; displayName: string } | null> {
   const key = `${query}|${country ?? ""}`.toLowerCase();
-  const cached = cacheGet(key);
-  if (cached) return cached.coords;
+  const mem = cacheGet(key);
+  if (mem) return mem.coords;
+
+  const persisted = dbGetGeo(key);
+  if (persisted) {
+    const coords =
+      persisted.lat != null && persisted.lng != null
+        ? {
+            lat: persisted.lat,
+            lng: persisted.lng,
+            displayName: persisted.displayName ?? "",
+          }
+        : null;
+    cachePut(key, { coords, ts: Date.now() });
+    return coords;
+  }
 
   const p = nominatimQueue.then(async () => {
     const wait = Math.max(0, NOMINATIM_MIN_INTERVAL_MS - (Date.now() - lastNominatimAt));
@@ -116,6 +135,11 @@ async function throttledNominatim(
     const coords = await callNominatim(query, country);
     lastNominatimAt = Date.now();
     cachePut(key, { coords, ts: Date.now() });
+    try {
+      dbPutGeo(key, coords);
+    } catch (err) {
+      console.warn(`[warmap:geo] db write failed: ${(err as Error).message}`);
+    }
     return coords;
   });
   nominatimQueue = p.catch(() => undefined);

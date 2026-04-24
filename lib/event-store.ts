@@ -1,3 +1,4 @@
+import { dbLoadEvents, dbPruneEvents, dbPutEvent } from "./db";
 import type { WarEvent } from "./types";
 
 type Listener = (event: WarEvent) => void;
@@ -9,16 +10,53 @@ class EventStore {
   private events: WarEvent[] = [];
   private byId = new Map<string, WarEvent>();
   private listeners = new Set<Listener>();
+  private hydrated = false;
+
+  hydrate(): void {
+    if (this.hydrated) return;
+    this.hydrated = true;
+    try {
+      const rows = dbLoadEvents<WarEvent>();
+      for (const ev of rows) {
+        if (this.byId.has(ev.id)) continue;
+        this.byId.set(ev.id, ev);
+        this.events.push(ev);
+      }
+      this.events.sort(
+        (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime(),
+      );
+      this.prune();
+      try {
+        const removed = dbPruneEvents(MAX_AGE_MS);
+        if (removed > 0) console.log(`[warmap:store] pruned ${removed} stale rows`);
+      } catch {
+        // ignore
+      }
+    } catch (err) {
+      console.warn(`[warmap:store] hydrate failed: ${(err as Error).message}`);
+    }
+  }
 
   add(event: WarEvent): boolean {
     if (this.byId.has(event.id)) return false;
     this.byId.set(event.id, event);
     this.events.push(event);
-    // Keep newest first for cheap reads
     this.events.sort(
       (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime(),
     );
     this.prune();
+
+    try {
+      dbPutEvent(
+        event.id,
+        event,
+        new Date(event.publishedAt).getTime(),
+        new Date(event.receivedAt).getTime(),
+      );
+    } catch (err) {
+      console.warn(`[warmap:store] db write failed: ${(err as Error).message}`);
+    }
+
     for (const listener of this.listeners) {
       try {
         listener(event);
@@ -31,6 +69,10 @@ class EventStore {
 
   list(): WarEvent[] {
     return [...this.events];
+  }
+
+  size(): number {
+    return this.events.length;
   }
 
   subscribe(listener: Listener): () => void {

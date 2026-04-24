@@ -30,6 +30,14 @@ export interface FeedItem {
   summary: string;
 }
 
+export type Mover = "missile" | "drone" | "aircraft" | "ship" | "troops" | "other";
+
+export interface EventVector {
+  origin: GeoLocation;
+  target: GeoLocation;
+  mover: Mover;
+}
+
 export interface WarEvent {
   id: string;
   title: string;
@@ -42,6 +50,7 @@ export interface WarEvent {
   eventType: EventType;
   severity: number;
   keywords: string[];
+  vector?: EventVector | null;
 }
 
 export interface PipelineStatus {

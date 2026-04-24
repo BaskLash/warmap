@@ -1,3 +1,4 @@
+import { dbGetLlm, dbPutLlm } from "./db";
 import type { EventType } from "./types";
 
 export type LocationType =
@@ -16,12 +17,19 @@ export interface ExtractedLocation {
   confidence: number;
 }
 
+export interface ExtractedVector {
+  origin: { name: string; country: string };
+  target: { name: string; country: string };
+  mover: "missile" | "drone" | "aircraft" | "ship" | "troops" | "other";
+}
+
 export interface LlmExtractionResult {
   isWar: boolean;
   eventType: EventType;
   severity: number;
   brief: string;
   locations: ExtractedLocation[];
+  vector: ExtractedVector | null;
 }
 
 const EVENT_TYPES: EventType[] = [
@@ -65,9 +73,18 @@ LOCATION RULES:
 - type: classify precisely. Waterways like straits = "strategic_waterway"; seas/gulfs = "sea"; named military bases and nuclear/weapon sites = "base".
 - confidence: 0-1. How sure you are this location is genuinely the subject of the event (not just a passing mention). A dateline or explicit incident location = 0.9-1.0. A passing contextual reference = 0.3-0.5.
 
-Return an empty locations array only when NO concrete geographic reference exists in the text.`;
+VECTOR (directional movement):
+- vector: populate ONLY when the text describes a kinetic movement from a clear ORIGIN to a clear TARGET (e.g. "Iran fired missiles from Isfahan toward Tel Aviv", "Russian warplanes launched from Crimea struck Odesa", "US warship transited from Bahrain to the Strait of Hormuz", "troops advanced from Bakhmut toward Kramatorsk"). Both endpoints must be explicitly named.
+- mover: what is moving — "missile", "drone", "aircraft", "ship", "troops", or "other".
+- If either endpoint is vague ("from the north", "from the region") or only ONE endpoint is named, return vector: null. Do not infer.
+- origin/target names must also appear in the locations array so they can be geocoded.
 
-// Strict JSON schema for structured outputs.
+Return vector: null and an empty locations array only when NO concrete geographic reference exists in the text.`;
+
+const MOVER_TYPES = ["missile", "drone", "aircraft", "ship", "troops", "other"] as const;
+
+// Strict JSON schema for structured outputs. OpenAI strict mode requires every
+// property to be in `required`; nullability is expressed with `type: ["T", "null"]`.
 const JSON_SCHEMA = {
   name: "war_event_extraction",
   strict: true,
@@ -93,8 +110,34 @@ const JSON_SCHEMA = {
           required: ["name", "type", "country", "confidence"],
         },
       },
+      vector: {
+        type: ["object", "null"],
+        additionalProperties: false,
+        properties: {
+          origin: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              name: { type: "string" },
+              country: { type: "string" },
+            },
+            required: ["name", "country"],
+          },
+          target: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              name: { type: "string" },
+              country: { type: "string" },
+            },
+            required: ["name", "country"],
+          },
+          mover: { type: "string", enum: MOVER_TYPES },
+        },
+        required: ["origin", "target", "mover"],
+      },
     },
-    required: ["isWar", "eventType", "severity", "brief", "locations"],
+    required: ["isWar", "eventType", "severity", "brief", "locations", "vector"],
   },
 };
 
@@ -104,10 +147,11 @@ const MAX_CACHE = 2000;
 interface LlmStats {
   calls: number;
   cacheHits: number;
+  dbHits: number;
   errors: number;
   totalLatencyMs: number;
 }
-const stats: LlmStats = { calls: 0, cacheHits: 0, errors: 0, totalLatencyMs: 0 };
+const stats: LlmStats = { calls: 0, cacheHits: 0, dbHits: 0, errors: 0, totalLatencyMs: 0 };
 
 function cachePut(key: string, value: LlmExtractionResult) {
   cache.set(key, value);
@@ -141,6 +185,15 @@ export async function extractWithLlm(
   if (cached) {
     stats.cacheHits++;
     return cached;
+  }
+
+  // Persistent cache — survives `npm run dev` restarts. This is the layer
+  // that keeps OpenAI costs flat across development iterations.
+  const fromDb = dbGetLlm<LlmExtractionResult>(id);
+  if (fromDb) {
+    stats.dbHits++;
+    cachePut(id, fromDb);
+    return fromDb;
   }
 
   const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
@@ -205,8 +258,29 @@ export async function extractWithLlm(
         country: (l.country ?? "").trim(),
         confidence: Math.max(0, Math.min(1, l.confidence ?? 0.5)),
       }));
+    if (parsed.vector) {
+      const v = parsed.vector;
+      const valid =
+        v.origin?.name?.trim() &&
+        v.target?.name?.trim() &&
+        (MOVER_TYPES as readonly string[]).includes(v.mover);
+      parsed.vector = valid
+        ? {
+            origin: { name: v.origin.name.trim(), country: (v.origin.country ?? "").trim() },
+            target: { name: v.target.name.trim(), country: (v.target.country ?? "").trim() },
+            mover: v.mover,
+          }
+        : null;
+    } else {
+      parsed.vector = null;
+    }
 
     cachePut(id, parsed);
+    try {
+      dbPutLlm(id, parsed);
+    } catch (err) {
+      console.warn(`[warmap:llm] db write failed: ${(err as Error).message}`);
+    }
     return parsed;
   } catch (err) {
     stats.errors++;

@@ -1,24 +1,26 @@
 import { classify } from "./classifier";
 import { findLocation } from "./gazetteer";
-import { resolveBestLocation } from "./geocoder";
-import { extractWithLlm, hasOpenAIKey } from "./llm-extractor";
-import type { EventType, FeedItem, WarEvent } from "./types";
+import { geocodeOne, resolveBestLocation } from "./geocoder";
+import {
+  extractWithLlm,
+  hasOpenAIKey,
+  type ExtractedVector,
+} from "./llm-extractor";
+import type { EventType, EventVector, FeedItem, WarEvent } from "./types";
 
 /**
  * Pipeline (for each RSS item):
  *
  *   1. Cheap keyword classifier  → drop obvious non-war articles
  *   2. If OPENAI_API_KEY set:
- *        a. Ask the LLM to re-classify and extract ALL explicit locations
- *           (cities, regions, countries, straits, seas, bases)
- *        b. Resolve each extracted location via custom gazetteer → Nominatim
- *           → country-level fallback, and pick the best one
+ *        a. Ask the LLM to re-classify, extract ALL explicit locations, and
+ *           optionally extract a directional vector (origin → target + mover).
+ *        b. Resolve each location via custom gazetteer → Nominatim → country
+ *           fallback, and pick the best one for the marker.
+ *        c. If a vector was returned, geocode both endpoints and attach.
  *      Else:
- *        Use the legacy gazetteer text-scan as the location resolver
- *   3. Build a WarEvent and hand it to the store
- *
- * Steps 2a–2b are the additive stage the user asked for; step 1 is the existing
- * cheap pre-filter preserved for cost / latency.
+ *        Use the legacy gazetteer text-scan as the location resolver.
+ *   3. Build a WarEvent and hand it to the store.
  */
 export async function extractEvent(item: FeedItem): Promise<WarEvent | null> {
   const text = `${item.title}. ${item.summary}`;
@@ -27,17 +29,19 @@ export async function extractEvent(item: FeedItem): Promise<WarEvent | null> {
 
   let eventType: EventType = keywordResult.eventType;
   let severity = keywordResult.severity;
-  let keywords = keywordResult.keywords;
+  const keywords = keywordResult.keywords;
   let summaryText = item.summary;
 
-  // Try the LLM-powered path.
   if (hasOpenAIKey()) {
     const llm = await extractWithLlm(item.id, item.title, item.summary);
     if (llm) {
-      if (!llm.isWar) return null; // LLM overrules the cheap classifier on negatives
+      if (!llm.isWar) return null;
       eventType = llm.eventType;
       severity = Math.max(severity, llm.severity);
       if (llm.brief) summaryText = llm.brief;
+
+      const vector = await resolveVector(llm.vector);
+
       if (llm.locations.length > 0) {
         const resolved = await resolveBestLocation(llm.locations);
         if (resolved) {
@@ -47,6 +51,7 @@ export async function extractEvent(item: FeedItem): Promise<WarEvent | null> {
             keywords,
             location: resolved,
             summary: summaryText,
+            vector,
           });
         }
       }
@@ -64,7 +69,31 @@ export async function extractEvent(item: FeedItem): Promise<WarEvent | null> {
     keywords,
     location: legacy,
     summary: summaryText,
+    vector: null,
   });
+}
+
+async function resolveVector(
+  raw: ExtractedVector | null,
+): Promise<EventVector | null> {
+  if (!raw) return null;
+  const [origin, target] = await Promise.all([
+    geocodeOne({
+      name: raw.origin.name,
+      country: raw.origin.country,
+      type: "other",
+      confidence: 0.8,
+    }),
+    geocodeOne({
+      name: raw.target.name,
+      country: raw.target.country,
+      type: "other",
+      confidence: 0.8,
+    }),
+  ]);
+  if (!origin || !target) return null;
+  if (origin.lat === target.lat && origin.lng === target.lng) return null;
+  return { origin, target, mover: raw.mover };
 }
 
 function buildEvent(
@@ -75,6 +104,7 @@ function buildEvent(
     keywords: string[];
     location: WarEvent["location"];
     summary: string;
+    vector: EventVector | null;
   },
 ): WarEvent {
   return {
@@ -89,5 +119,6 @@ function buildEvent(
     eventType: parts.eventType,
     severity: parts.severity,
     keywords: parts.keywords,
+    vector: parts.vector,
   };
 }
