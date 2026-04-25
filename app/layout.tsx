@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
+import { GoogleAnalytics } from "@next/third-parties/google";
+import AnalyticsProvider from "@/components/analytics/AnalyticsProvider";
+import ScrollDepthTracker from "@/components/analytics/ScrollDepthTracker";
 import "leaflet/dist/leaflet.css";
 import "./globals.css";
 
@@ -20,6 +23,8 @@ export const metadata: Metadata = {
     "Live map of war-related events aggregated from trusted RSS news sources, geolocated and classified automatically.",
 };
 
+const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -33,6 +38,9 @@ export default function RootLayout({
       <body className="h-full min-h-screen bg-black text-zinc-100 overflow-hidden">
         {children}
         <Analytics />
+        <AnalyticsProvider />
+        <ScrollDepthTracker />
+        {GA_ID ? <GoogleAnalytics gaId={GA_ID} /> : null}
       </body>
     </html>
   );
