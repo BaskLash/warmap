@@ -27,7 +27,7 @@ export default function BlogListItem({ post }: Props) {
             })}
           </time>
           <span>·</span>
-          <span>{post.readTime}</span>
+          <span>{post.readTime} min read</span>
         </div>
         <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-50 group-hover:text-white">
           {post.title}
