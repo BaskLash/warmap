@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BLOGS, getBlog } from "@/lib/blogs";
-import MarkdownRenderer from "@/components/blog/MarkdownRenderer";
 import BlogCta from "./BlogCta";
 
 interface Params {
@@ -18,8 +17,11 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const { slug } = await params;
   const post = getBlog(slug);
+
   if (!post) return { title: "Essay not found — Warmap" };
+
   const url = `/blog/${post.slug}`;
+
   return {
     title: `${post.title} — Warmap`,
     description: post.description,
@@ -42,6 +44,81 @@ export async function generateMetadata(
   };
 }
 
+/* ---------------- MARKDOWN RENDERER ---------------- */
+
+function renderMarkdown(content: string) {
+  const lines = content.trimStart().split("\n");
+  const elements: React.ReactNode[] = [];
+  let inList = false;
+  let listItems: React.ReactNode[] = [];
+
+  const flushList = () => {
+    if (listItems.length > 0) {
+      elements.push(
+        <ul key={`list-${elements.length}`} className="flex flex-col gap-2 pl-5 list-disc">
+          {listItems}
+        </ul>,
+      );
+      listItems = [];
+      inList = false;
+    }
+  };
+
+  const formatInline = (text: string) =>
+    text
+      .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*(.*?)\*/g, "<em>$1</em>")
+      .replace(
+        /\[([^\]]+)\]\(([^)]+)\)/g,
+        `<a href="$2" target="_blank" rel="noopener noreferrer" class="underline text-zinc-200 hover:text-white">$1</a>`,
+      );
+
+  lines.forEach((line, i) => {
+    const trimmed = line.trim();
+
+    if (trimmed === "---") {
+      flushList();
+      elements.push(<hr key={`hr-${i}`} className="my-8 border-white/10" />);
+    } else if (trimmed.startsWith("## ")) {
+      flushList();
+      elements.push(
+        <h2 key={`h2-${i}`} className="mt-10 mb-4 text-xl font-semibold text-zinc-100">
+          {trimmed.replace("## ", "")}
+        </h2>,
+      );
+    } else if (trimmed.startsWith("### ")) {
+      flushList();
+      elements.push(
+        <h3 key={`h3-${i}`} className="mt-6 mb-3 text-lg font-medium text-zinc-200">
+          {trimmed.replace("### ", "")}
+        </h3>,
+      );
+    } else if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+      inList = true;
+      const item = trimmed.replace(/^[-*] /, "");
+      listItems.push(
+        <li key={`li-${i}`}>
+          <span dangerouslySetInnerHTML={{ __html: formatInline(item) }} />
+        </li>,
+      );
+    } else if (trimmed === "") {
+      flushList();
+    } else {
+      flushList();
+      elements.push(
+        <p key={`p-${i}`} className="leading-relaxed text-zinc-300">
+          <span dangerouslySetInnerHTML={{ __html: formatInline(trimmed) }} />
+        </p>,
+      );
+    }
+  });
+
+  flushList();
+  return elements;
+}
+
+/* ---------------- PAGE ---------------- */
+
 export default async function BlogPostPage({
   params,
 }: {
@@ -49,6 +126,7 @@ export default async function BlogPostPage({
 }) {
   const { slug } = await params;
   const post = getBlog(slug);
+
   if (!post) notFound();
 
   return (
@@ -77,20 +155,25 @@ export default async function BlogPostPage({
                 })}
               </time>
               <span>·</span>
-              <span>{post.readTime}</span>
+              <span>{post.readTime} min read</span>
             </div>
+
             <h1 className="mt-3 text-3xl sm:text-4xl font-semibold tracking-tight text-zinc-50 leading-tight">
               {post.title}
             </h1>
+
             <p className="mt-4 text-lg text-zinc-400 leading-relaxed">
               {post.description}
             </p>
+
             <p className="mt-6 text-sm text-zinc-500">
               By <span className="text-zinc-300">{post.author}</span>
             </p>
           </header>
 
-          <MarkdownRenderer source={post.content} />
+          <div className="space-y-4">
+            {renderMarkdown(post.content)}
+          </div>
         </article>
 
         <BlogCta />
