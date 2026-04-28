@@ -1,13 +1,42 @@
-// Typed gtag helpers. All analytics call sites go through this module so we
-// have one place to add new event names, future provider switches, or
-// per-environment muting.
+// Single entrypoint for every analytics call in the app. SSR-safe: every
+// helper short-circuits when window or window.gtag is missing.
 //
-// SSR-safe: every helper short-circuits when window or window.gtag is missing,
-// so server components and prerender passes won't blow up.
+// trackEvent automatically attaches behavioural metadata (session_id, page_path,
+// timestamp) to every event so call sites only have to think about what
+// happened, not who/where/when.
+
+import { getSessionId } from "./analytics-session";
 
 export type GtagEventName =
+  // navigation / engagement
   | "page_view"
   | "scroll_depth"
+  // session lifecycle
+  | "session_start"
+  | "session_duration"
+  | "session_active_time"
+  | "session_idle_time"
+  // map interactions
+  | "map_zoom_in"
+  | "map_zoom_out"
+  | "map_pan"
+  | "map_mouse_move_intensity"
+  | "map_hover_duration"
+  // click instrumentation
+  | "click_incident_point"
+  | "click_news_article"
+  | "click_filter_option"
+  | "click_sidepanel_item"
+  // filter behaviour
+  | "filter_applied"
+  | "filter_removed"
+  | "filter_changed"
+  | "filter_used_session"
+  // ui exploration
+  | "ui_hover_element"
+  | "ui_revisit_element"
+  | "ui_exploration_pattern"
+  // existing CTA buttons
   | "blog_click"
   | "request_access_click"
   | "start_now_click";
@@ -33,13 +62,22 @@ export function isAnalyticsReady(): boolean {
   return typeof window !== "undefined" && typeof window.gtag === "function";
 }
 
+function autoMeta(): Record<string, string | number> {
+  if (typeof window === "undefined") return {};
+  return {
+    session_id: getSessionId(),
+    page_path: window.location.pathname,
+    ts: Date.now(),
+  };
+}
+
 export function trackEvent(
   name: GtagEventName,
   params?: GtagEventParams,
 ): void {
   if (!isAnalyticsReady()) return;
   try {
-    window.gtag!("event", name, params ?? {});
+    window.gtag!("event", name, { ...autoMeta(), ...(params ?? {}) });
   } catch {
     // Never let analytics errors surface to the user.
   }
@@ -50,10 +88,16 @@ export function trackPageview(path: string, title?: string): void {
   const gaId = process.env.NEXT_PUBLIC_GA_ID;
   if (!gaId) return;
   try {
-    // App Router doesn't trigger gtag's automatic pageview on client
-    // navigation, so we update the property and fire an explicit page_view.
-    window.gtag!("config", gaId, { page_path: path, page_title: title });
-    window.gtag!("event", "page_view", { page_path: path, page_title: title });
+    window.gtag!("config", gaId, {
+      page_path: path,
+      page_title: title,
+      session_id: getSessionId(),
+    });
+    window.gtag!("event", "page_view", {
+      ...autoMeta(),
+      page_path: path,
+      page_title: title,
+    });
   } catch {
     // ignore
   }

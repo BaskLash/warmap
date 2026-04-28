@@ -23,6 +23,88 @@ export interface BlogPost {
 
 export const BLOGS: BlogPost[] = [
   {
+      slug: "2026-04-product-launch-insights-user-growth",
+  title: "What We Learned After Launch: Growth, Bots, and Real User Behavior",
+  description:
+    "A behind-the-scenes look at our product launch: how we reduced costs, improved quality, and discovered what really drives user engagement.",
+  date: "2026-04-28",
+  readTime: 4,
+  category: "Product Updates",
+  author: "WarTrackerLive Team",
+  content: `Launching a new product is never just about going live.
+
+It’s about observing, adapting, and learning — fast.
+
+Over the past week, we’ve gathered valuable insights into how our platform performs under real-world conditions. Some of the results were expected. Others completely changed how we think about growth and user experience.
+
+## The reality of early traffic
+
+Like many new platforms, our initial traffic wasn’t purely human.
+
+Bots played a noticeable role in the beginning — increasing API usage and creating noise in our data. But instead of ignoring it, we focused on optimizing our infrastructure.
+
+The result?
+
+We’ve reduced API usage so significantly that operating costs are now minimal — without sacrificing performance or quality.
+
+## Efficiency without compromise
+
+Cutting costs often comes at the expense of user experience.
+
+Not here.
+
+Our priority was clear from the start:
+Maintain high quality while improving efficiency.
+
+By refining how and when our systems make requests, we’ve built a setup that is both cost-effective and reliable — ensuring that every real user interaction remains smooth and responsive.
+
+## What actually drives engagement
+
+One of the most important insights came from user behavior.
+
+We initially assumed that requiring users to log in would be a natural step.
+
+But reality told a different story.
+
+Direct access to the platform — without friction — led to noticeably higher engagement.
+
+Users don’t want barriers.
+
+They want immediate value.
+
+## Why we’re doubling down on data
+
+Right now, we’re just getting started.
+
+To make smarter decisions moving forward, we’re preparing to implement deeper analytics across the platform. This will help us answer critical questions:
+
+- Which features are actually being used?
+- Where do users drop off?
+- What creates real value — and what doesn’t?
+
+Instead of guessing, we’ll let real data guide our next steps.
+
+## Building based on reality, not assumptions
+
+Too many products are built on what creators *think* users want.
+
+We’re taking a different approach.
+
+Every feature, every change, every improvement will be driven by actual usage — not assumptions.
+
+Because in the end, success isn’t defined by what exists…
+
+…but by what people truly use.
+
+---
+
+We’re just at the beginning.
+
+And the platform is evolving quickly.
+
+If you want to experience it yourself and see how it works in real time, now is the perfect moment to try it.`,
+},
+  {
     slug: "why-you-never-see-the-full-war",
     title: "Why You Never See the Full War",
     description:

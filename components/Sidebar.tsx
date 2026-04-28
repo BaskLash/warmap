@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { EventType, WarEvent } from "@/lib/types";
+import { trackEvent } from "@/lib/analytics";
+import { debounce } from "@/lib/throttle";
 import { EVENT_COLORS, EVENT_LABELS, eventColor, relativeTime } from "./event-style";
 
 interface Props {
@@ -26,6 +28,85 @@ const FILTER_TYPES: Array<EventType | "all"> = [
 export default function Sidebar({ events, latestId, onFocus }: Props) {
   const [filter, setFilter] = useState<EventType | "all">("all");
   const [query, setQuery] = useState("");
+
+  // One-shot session marker so we know whether this user ever engaged with
+  // any sidebar filter (search OR pill). Useful as a denominator for the
+  // "users who filter" funnel.
+  const filterUsedFired = useRef(false);
+  const markFilterUsedOnce = () => {
+    if (filterUsedFired.current) return;
+    filterUsedFired.current = true;
+    trackEvent("filter_used_session", { surface: "sidebar" });
+  };
+
+  // Filter pill handler: classifies the transition so analytics can split
+  // first-time activations (filter_applied), clears (filter_removed), and
+  // swaps (filter_changed).
+  const onSelectFilter = (next: EventType | "all") => {
+    if (next === filter) return;
+    const prev = filter;
+    setFilter(next);
+    markFilterUsedOnce();
+    if (next === "all") {
+      trackEvent("filter_removed", {
+        surface: "sidebar",
+        from: prev,
+        to: next,
+      });
+    } else if (prev === "all") {
+      trackEvent("filter_applied", {
+        surface: "sidebar",
+        filter: next,
+      });
+    } else {
+      trackEvent("filter_changed", {
+        surface: "sidebar",
+        from: prev,
+        to: next,
+      });
+    }
+    trackEvent("click_filter_option", {
+      surface: "sidebar",
+      filter: next,
+    });
+  };
+
+  // Debounce search-input tracking — fire once 500ms after the user stops
+  // typing, with the query length only (avoid sending raw queries to GA).
+  const trackSearchDebounced = useRef(
+    debounce((q: string) => {
+      if (q.length === 0) {
+        trackEvent("filter_removed", { surface: "sidebar_search" });
+      } else {
+        markFilterUsedOnce();
+        trackEvent("filter_changed", {
+          surface: "sidebar_search",
+          query_length: q.length,
+        });
+      }
+    }, 500),
+  ).current;
+
+  useEffect(() => {
+    trackSearchDebounced(query);
+  }, [query, trackSearchDebounced]);
+
+  const onItemClick = (e: WarEvent) => {
+    trackEvent("click_news_article", {
+      element_id: e.id,
+      source: e.source,
+      event_type: e.eventType,
+      location_name: e.location.name,
+      country: e.location.country,
+      severity: e.severity,
+      surface: "sidebar",
+    });
+    trackEvent("click_sidepanel_item", {
+      element_id: e.id,
+      surface: "sidebar_event_list",
+    });
+    onFocus(e.id);
+  };
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -76,7 +157,7 @@ export default function Sidebar({ events, latestId, onFocus }: Props) {
             return (
               <button
                 key={t}
-                onClick={() => setFilter(t)}
+                onClick={() => onSelectFilter(t)}
                 className={`group flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition border ${
                   active
                     ? "bg-white/10 border-white/20 text-zinc-50"
@@ -114,7 +195,7 @@ export default function Sidebar({ events, latestId, onFocus }: Props) {
                   className={`group border-b border-white/5 ${isLatest ? "warmap-new" : ""}`}
                 >
                   <button
-                    onClick={() => onFocus(e.id)}
+                    onClick={() => onItemClick(e)}
                     className="w-full text-left px-4 py-3 hover:bg-white/5 transition-colors"
                   >
                     <div className="flex items-start gap-3">

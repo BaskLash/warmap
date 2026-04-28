@@ -7,7 +7,12 @@ import type {
   Polyline as LeafletPolyline,
 } from "leaflet";
 import type { EventType, Mover, WarEvent } from "@/lib/types";
+import { trackEvent } from "@/lib/analytics";
 import { EVENT_LABELS, eventColor, relativeTime } from "./event-style";
+
+// Coarse coordinate buckets keep GA cardinality bounded — exact lat/lng would
+// register as a unique value per pan, blowing past GA's per-parameter limits.
+const bucketCoord = (n: number) => Math.round(n * 10) / 10;
 
 interface LocationGroup {
   key: string;
@@ -230,10 +235,64 @@ export default function WarMap({
 
       mapRef.current = map;
       setMapReady(true);
+
+      // ── Map interaction tracking ──────────────────────────────────────
+      // Zoom: fire only on zoomend so we don't spam during the animation.
+      let lastZoom = map.getZoom();
+      map.on("zoomend", () => {
+        const z = map.getZoom();
+        if (z === lastZoom) return;
+        const direction = z > lastZoom ? "map_zoom_in" : "map_zoom_out";
+        trackEvent(direction, { zoom: z, from_zoom: lastZoom });
+        lastZoom = z;
+      });
+
+      // Pan: Leaflet already debounces moveend; bucket the center to keep
+      // cardinality manageable and ignore tiny jitter moves.
+      let lastCenter = map.getCenter();
+      map.on("moveend", () => {
+        const c = map.getCenter();
+        const drift =
+          Math.abs(c.lat - lastCenter.lat) + Math.abs(c.lng - lastCenter.lng);
+        if (drift < 0.01) return;
+        lastCenter = c;
+        trackEvent("map_pan", {
+          center_lat: bucketCoord(c.lat),
+          center_lng: bucketCoord(c.lng),
+          zoom: map.getZoom(),
+        });
+      });
+
+      // Mouse-move intensity: count moves locally, emit one aggregated event
+      // every 10s. Never one event per move.
+      let moveCount = 0;
+      let firstMoveAt = 0;
+      map.on("mousemove", () => {
+        if (moveCount === 0) firstMoveAt = Date.now();
+        moveCount++;
+      });
+      const intensityTimer = setInterval(() => {
+        if (moveCount === 0) return;
+        const windowMs = Date.now() - firstMoveAt;
+        trackEvent("map_mouse_move_intensity", {
+          samples: moveCount,
+          window_ms: windowMs,
+          rate_per_sec: Math.round((moveCount / Math.max(windowMs, 1)) * 1000),
+        });
+        moveCount = 0;
+        firstMoveAt = 0;
+      }, 10_000);
+      // Stash on the map instance so the cleanup below can clear it.
+      (map as unknown as { __warmapTimers__?: ReturnType<typeof setInterval>[] }).__warmapTimers__ = [intensityTimer];
     })();
     return () => {
       cancelled = true;
       if (mapRef.current) {
+        const timers =
+          (mapRef.current as unknown as {
+            __warmapTimers__?: ReturnType<typeof setInterval>[];
+          }).__warmapTimers__ ?? [];
+        for (const t of timers) clearInterval(t);
         mapRef.current.remove();
         mapRef.current = null;
       }
@@ -294,15 +353,47 @@ export default function WarMap({
           className: "warmap-popup",
         });
 
+        // Per-marker hover duration tracking. A short hover (<300ms) is most
+        // likely an accidental flyover and is dropped to keep the data clean.
+        let hoverStart = 0;
+
         marker.on("mouseover", () => {
           marker.openPopup();
           hoverCbRef.current?.(primary.id);
+          hoverStart = Date.now();
+          trackEvent("ui_hover_element", {
+            element: "incident_marker",
+            element_id: primary.id,
+            event_type: primary.eventType,
+            location_name: primary.location.name,
+          });
         });
         marker.on("mouseout", () => {
           hoverCbRef.current?.(null);
+          if (hoverStart > 0) {
+            const ms = Date.now() - hoverStart;
+            hoverStart = 0;
+            if (ms >= 300) {
+              trackEvent("map_hover_duration", {
+                element_id: primary.id,
+                ms,
+                event_type: primary.eventType,
+                location_name: primary.location.name,
+              });
+            }
+          }
         });
         marker.on("click", () => {
           marker.openPopup();
+          trackEvent("click_incident_point", {
+            element_id: primary.id,
+            event_type: primary.eventType,
+            location_name: primary.location.name,
+            country: primary.location.country,
+            stack_count: count,
+            severity: primary.severity,
+            source: primary.source,
+          });
         });
 
         markersRef.current.set(group.key, marker);

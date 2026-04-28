@@ -4,6 +4,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { GoogleAnalytics } from "@next/third-parties/google";
 import AnalyticsProvider from "@/components/analytics/AnalyticsProvider";
 import ScrollDepthTracker from "@/components/analytics/ScrollDepthTracker";
+import SessionTracker from "@/components/analytics/SessionTracker";
 import "leaflet/dist/leaflet.css";
 import "./globals.css";
 
@@ -38,6 +39,7 @@ export default function RootLayout({
       <body className="h-full min-h-screen bg-black text-zinc-100 overflow-hidden">
         {children}
         <Analytics />
+        <SessionTracker />
         <AnalyticsProvider />
         <ScrollDepthTracker />
         {GA_ID ? <GoogleAnalytics gaId={GA_ID} /> : null}

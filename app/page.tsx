@@ -7,6 +7,7 @@ import Sidebar from "@/components/Sidebar";
 import Legend from "@/components/Legend";
 import LoadingOverlay from "@/components/LoadingOverlay";
 import { useEvents } from "@/components/useEvents";
+import { trackEvent } from "@/lib/analytics";
 
 const WarMap = dynamic(() => import("@/components/WarMap"), {
   ssr: false,
@@ -34,17 +35,43 @@ export default function Home() {
     if (typeof window === "undefined" || !("Notification" in window)) return;
     if (notificationsOn) {
       setNotificationsOn(false);
+      trackEvent("click_filter_option", {
+        feature: "notifications",
+        next_state: "off",
+      });
       return;
     }
     if (Notification.permission === "granted") {
       setNotificationsOn(true);
+      trackEvent("click_filter_option", {
+        feature: "notifications",
+        next_state: "on",
+        permission: "granted",
+      });
       return;
     }
     if (Notification.permission !== "denied") {
       const result = await Notification.requestPermission();
       if (result === "granted") setNotificationsOn(true);
+      trackEvent("click_filter_option", {
+        feature: "notifications",
+        next_state: result === "granted" ? "on" : "off",
+        permission: result,
+      });
     }
   }, [notificationsOn]);
+
+  const handleSidebarToggle = useCallback(() => {
+    setSidebarOpen((v) => {
+      const next = !v;
+      trackEvent("click_sidepanel_item", {
+        element: "sidebar_toggle",
+        next_state: next ? "open" : "closed",
+        viewport: "mobile",
+      });
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (events.length > 0 && !didBootstrap.current) {
@@ -97,7 +124,7 @@ export default function Home() {
       <Legend />
 
       <button
-        onClick={() => setSidebarOpen((v) => !v)}
+        onClick={handleSidebarToggle}
         aria-expanded={sidebarOpen}
         aria-label={sidebarOpen ? "Close event feed" : "Open event feed"}
         className="pointer-events-auto absolute right-4 top-20 z-[600] flex items-center gap-2 rounded-xl border border-white/10 bg-zinc-950/80 px-3 py-2 text-xs font-medium text-zinc-200 backdrop-blur-xl shadow-xl shadow-black/40 hover:bg-zinc-900/80 transition md:hidden"
