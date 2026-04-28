@@ -20,6 +20,11 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Warmap — Real-time Conflict Intelligence",
+  icons: {
+    icon: "/logo.png", // Pfad zu deiner Datei
+    shortcut: "/logo.png",
+    apple: "/logo.png", // Optional für iOS
+  },
   description:
     "Live map of war-related events aggregated from trusted RSS news sources, geolocated and classified automatically.",
 };
