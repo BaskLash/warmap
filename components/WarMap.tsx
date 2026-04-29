@@ -215,9 +215,12 @@ export default function WarMap({
       const map = L.map(containerRef.current, {
         center: [30, 25],
         zoom: 3,
-        minZoom: 2,
+        minZoom: 3,
         maxZoom: 12,
-        worldCopyJump: true,
+        // Hard stop at the world bounds. Antarctica/Arctic are clipped to the
+        // tile-supported range so zoom-out doesn't reveal grey margins.
+        maxBounds: [[-85, -180], [85, 180]],
+        maxBoundsViscosity: 1.0,
         zoomControl: true,
         attributionControl: true,
         preferCanvas: true,
@@ -319,8 +322,9 @@ export default function WarMap({
       const color = eventColor(primary);
       const count = group.events.length;
 
+      const lowConfidence = primary.location.confidence === "low";
       const html = `
-        <div class="warmap-marker" style="--marker-color:${color};">
+        <div class="warmap-marker${lowConfidence ? " is-low-confidence" : ""}" style="--marker-color:${color};">
           ${animationLayer(primary.eventType)}
           <span class="warmap-marker-pulse"></span>
           <span class="warmap-marker-dot"></span>

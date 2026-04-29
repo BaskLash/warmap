@@ -40,10 +40,14 @@ export async function extractEvent(item: FeedItem): Promise<WarEvent | null> {
       severity = Math.max(severity, llm.severity);
       if (llm.brief) summaryText = llm.brief;
 
-      const vector = await resolveVector(llm.vector);
+      const vector = await resolveVector(llm.vector, item.id);
 
       if (llm.locations.length > 0) {
-        const resolved = await resolveBestLocation(llm.locations);
+        const resolved = await resolveBestLocation(
+          llm.locations,
+          {},
+          { itemId: item.id, source: "primary" },
+        );
         if (resolved) {
           return buildEvent(item, {
             eventType,
@@ -75,21 +79,30 @@ export async function extractEvent(item: FeedItem): Promise<WarEvent | null> {
 
 async function resolveVector(
   raw: ExtractedVector | null,
+  itemId: string,
 ): Promise<EventVector | null> {
   if (!raw) return null;
   const [origin, target] = await Promise.all([
-    geocodeOne({
-      name: raw.origin.name,
-      country: raw.origin.country,
-      type: "other",
-      confidence: 0.8,
-    }),
-    geocodeOne({
-      name: raw.target.name,
-      country: raw.target.country,
-      type: "other",
-      confidence: 0.8,
-    }),
+    geocodeOne(
+      {
+        name: raw.origin.name,
+        country: raw.origin.country,
+        type: "other",
+        confidence: 0.8,
+      },
+      {},
+      { itemId, source: "vector-origin" },
+    ),
+    geocodeOne(
+      {
+        name: raw.target.name,
+        country: raw.target.country,
+        type: "other",
+        confidence: 0.8,
+      },
+      {},
+      { itemId, source: "vector-target" },
+    ),
   ]);
   if (!origin || !target) return null;
   if (origin.lat === target.lat && origin.lng === target.lng) return null;

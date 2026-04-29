@@ -89,6 +89,12 @@ body {
   100% { transform: scale(2.2); opacity: 0; }
 }
 
+/* Low-confidence (country-fallback / unverifiable) — dim the whole marker so
+   it reads as approximate at a glance. The popup still shows the badge. */
+.warmap-marker.is-low-confidence {
+  opacity: 0.45;
+}
+
 /* Cluster marker */
 .warmap-cluster {
   display: flex;
