@@ -23,6 +23,156 @@ export interface BlogPost {
 
 export const BLOGS: BlogPost[] = [
   {
+      title: "How to Fix Map Panning and Incorrect Markers in Real-Time Data Maps",
+  slug: "2026-04-fix-map-panning-marker-errors",
+  date: "2026-04-29",
+  readTime: 4,
+  category: "Bug Fixes",
+  author: "WarTrackerLive Team",
+  description: "Learn how to fix common issues in real-time map applications, including unrestricted panning and misplaced markers. Improve accuracy, usability, and user trust with these practical strategies.",
+  content: `
+# How to Fix Map Panning and Incorrect Markers in Real-Time Data Maps
+
+Building a real-time map application can be incredibly powerful—but also technically challenging. If you're working on a project like a live conflict tracker or event visualization tool, even small issues can significantly impact user experience and credibility.
+
+In this article, we’ll walk through two common problems developers face:
+- Unrestricted map panning into empty space
+- Incorrectly placed markers due to geolocation errors
+
+More importantly, we’ll show you how to fix them in a structured, professional way.
+
+---
+
+## Why These Issues Matter
+
+When users interact with a real-time map, they expect accuracy and smooth navigation. If they can drag the map into empty grey space or see events appearing in the wrong location, trust is immediately lost.
+
+Fixing these issues improves:
+- User experience
+- Data credibility
+- Engagement and retention
+
+---
+
+## Step 1: Understand Your Map Setup
+
+Before making any changes, it's essential to analyze your codebase.
+
+Start by identifying:
+- Which map library you're using (e.g., Leaflet, Mapbox)
+- The version of the library
+- Where the map is initialized
+- Where markers are created and added
+
+This step ensures that you apply the correct fixes without breaking existing functionality.
+
+---
+
+## Issue 1: Prevent Users from Dragging the Map Into Empty Space
+
+### The Problem
+
+Users can currently pan the map far beyond the visible world, ending up in empty grey areas. This breaks immersion and makes the application feel unfinished.
+
+### The Solution
+
+If you're using Leaflet, you can easily constrain the map bounds.
+
+### Recommended Fix
+
+- Set \`maxBounds\` to restrict the visible area:
+  \`[[-90, -180], [90, 180]]\`
+- Use \`maxBoundsViscosity: 1.0\` to create a firm boundary
+- Define a sensible \`minZoom\` level to prevent zooming out too far
+
+### Optional Enhancement
+
+Decide how you want horizontal navigation to behave:
+- Enable infinite horizontal scrolling (\`worldCopyJump: true\`)
+- Or enforce a hard stop at the map edges
+
+This choice depends on your UX goals—there’s no one-size-fits-all answer.
+
+---
+
+## Issue 2: Fix Incorrect Marker Placement
+
+### The Problem
+
+Some markers appear in completely wrong locations—for example, events showing up outside their actual region.
+
+This typically affects around 10–15% of markers in real-world applications.
+
+### The Root Causes
+
+To fix this properly, you need to trace your geocoding pipeline:
+
+#### 1. Data Source Analysis
+Check where your coordinates originate:
+- RSS feeds?
+- AI/LLM extraction?
+- Geocoding APIs (like Nominatim)?
+- Hardcoded mappings?
+
+#### 2. Coordinate Order Bugs
+A very common issue:
+- Mixing up \`[lat, lng]\` and \`[lng, lat]\`
+- Especially when working with GeoJSON formats
+
+#### 3. Low-Confidence Geocoding Results
+Some geocoding services return:
+- Broad country-level matches
+- Low-confidence coordinates
+- Large bounding boxes
+
+These should be filtered, flagged, or reviewed before placing markers.
+
+---
+
+## Improve Reliability with Logging
+
+To maintain long-term accuracy, implement structured logging in your geocoding pipeline.
+
+This allows you to:
+- Detect incorrect matches in production
+- Analyze patterns in faulty data
+- Continuously improve your system
+
+Logging is not just a debugging tool—it’s a reliability strategy.
+
+---
+
+## Best Practice: Use a Structured Workflow
+
+Instead of jumping straight into code changes, follow a disciplined process:
+
+1. Explore and understand the codebase
+2. Identify the root causes
+3. Propose a clear implementation plan
+4. Review and approve changes
+5. Apply fixes carefully
+6. Run tests and validate results
+
+This approach minimizes risk and ensures maintainable improvements.
+
+---
+
+## Final Thoughts
+
+Real-time map applications are only as strong as their accuracy and usability. By fixing panning constraints and improving marker placement, you significantly enhance both.
+
+These aren’t just technical tweaks—they directly impact how users perceive your platform.
+
+---
+
+## Want to Optimize Your Workflow Faster?
+
+If you're working with complex prompts, debugging tasks, or structured development workflows, using the right tool can make all the difference.
+
+Try our tool to streamline your prompts, improve clarity, and build more reliable systems—without the guesswork.
+`
+},
+  {
       slug: "2026-04-product-launch-insights-user-growth",
   title: "What We Learned After Launch: Growth, Bots, and Real User Behavior",
   description:
